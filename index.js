@@ -14,6 +14,10 @@ app.get('/:id', (req, res) => {
     res.send(id);
 })
 
+app.get('/users', (req, res) => {
+    res.send('Nothing of yet');
+});
+
 app.use('/api/users', users);
 
 app.listen(PORT, () => {
