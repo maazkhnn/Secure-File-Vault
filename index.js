@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require ('mongoose'); //(you only need to run npm install mongoose, as it is built on top of the MongoDB driver, so it automatically installs mongodb as a dependancy behind the scenes)
 require('dotenv').config();
 // this immediately loads and runs the config() function
 // compared to "const dotenv = require('dotenv'); dotenv.config();" which is the
@@ -13,10 +14,18 @@ const PORT = process.env.PORT || 4000; // fallback makes sure the app still runs
 // Middleware
 app.use(express.json());
 
+//MongoDB Connection
+mongoose.connect(process.env.MONGO_URI) // this returns a Promise
+    .then(() => console.log('MongoDB Connected'))
+    .catch((err) => console.error('MongoDB Connection error:', err)); // when .catch() runs, it automatically receives the error that caused the promise to fail — and you get to name that error whatever you want, so "err"
+    
+    // handling promises with:
+    // .then().catch() -> old school, works fine
+    // async/await -> cleaner, preferred for bigger apps
+
 //Routes
 const users = require('./routes/userRoutes');
 const vaults = require('./routes/vaultRoutes');
-
 
 app.use('/api/users', users);
 app.use('/api/vaults', vaults);
