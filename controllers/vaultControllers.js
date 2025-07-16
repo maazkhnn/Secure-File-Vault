@@ -5,7 +5,8 @@ const Vault = require('../models/vaultModel'); // naming convention for construc
 // GET vaults from DB
 const getVaults = async (req, res) => {
     try {
-        const vaults = await Vault.find() //get all vaults
+        const vaults = await Vault.find({ owner: req.user.userID });
+        // Vault.find() gets all vaults
         res.status(200).json(vaults);
     } catch(error) {
         res.status(500).json({ error: 'Failed to get vaults (Server error)'});
@@ -14,14 +15,9 @@ const getVaults = async (req, res) => {
 
 // POST a new vault in DB
 const createVaults = async (req, res) => {
-    const { name, owner } = req.body;
-    
-    if (!name || !owner) {
-        return res.status(400).json({ error: 'Name and owner is required' });
-    }
-
     try {
-        const newVault = await Vault.create({ name, owner });
+        const { name } = req.body;
+        const newVault = await Vault.create({ name, owner: req.user.userID });
         res.status(201).json(newVault);
     } catch(error) {
         res.status(500).json({ error: 'Failed to create vault'});
@@ -29,7 +25,7 @@ const createVaults = async (req, res) => {
     // 201: The request was successful and resulted in a new resource being CREATED
     // 200: The request succeeded, and the server is RETURNING some result
     // 204: Success, but no response body (e.g. DELETE success)
-}
+};
 
 module.exports = { getVaults, createVaults };
 
