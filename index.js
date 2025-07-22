@@ -11,6 +11,11 @@ const PORT = process.env.PORT || 4000; // fallback makes sure the app still runs
 // common dev ports for web serves/apis: 3000, 4000, 5000
 // common alternatives, sometimes used for proxies or test apis: 8080, 8888
 // reserved for production HTTP/HTTPS: 80, 443 (you usually dont use these for local dev)
+const connectDB = require('./config/db');
+const vaultRoutes = require('./routes/vaultRoutes');
+const authRoutes = require('./routes/authRoutes');
+const fileRoutes = require('./routes/fileRoutes');
+//const userRoutes = require('./routes/userRoutes');
 
 // Middleware
 app.use(express.json()); //you're calling a function that returns a middleware function
@@ -23,12 +28,6 @@ app.use(express.json()); //you're calling a function that returns a middleware f
     // .then().catch() -> old school, works fine
     // async/await -> cleaner, preferred for bigger apps
 */
-
-const connectDB = require('./config/db');
-const vaultRoutes = require('./routes/vaultRoutes');
-const authRoutes = require('./routes/authRoutes');
-const fileRoutes = require('./routes/fileRoutes');
-//const userRoutes = require('./routes/userRoutes');
 
 //MongoDB Connection
 connectDB(); //recommended style for real apps
@@ -43,8 +42,8 @@ connectDB(); //recommended style for real apps
 */
 
 //Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/vaults', vaultRoutes);
-app.use('/auth', authRoutes);
 app.use('/api', fileRoutes);
 //app.use('/api/users', userRoutes); dont need this as of yet(creation already in auth)
 

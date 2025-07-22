@@ -12,11 +12,11 @@ const requireAuth = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = { userId: decoded.userId }; // attaching authenticated user's info to the request
+        req.user = { userId: decoded.userId }; // the authenticated user's ID, pulled from JWT, verified, and attached to the request
         next();
     } catch (error) {
         return res.status(401).json({ error: 'Invalid Token'});
     }
 };
 
-module.exports = requireAuth;
+module.exports = requireAuth; //when exporting only one thing, you can skip the {} which are mainly for multiple, as it will get destructured first in the file where its being imported

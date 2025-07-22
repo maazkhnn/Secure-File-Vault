@@ -5,7 +5,7 @@ const Vault = require('../models/vaultModel'); // naming convention for construc
 // GET vaults from DB
 const getVaults = async (req, res) => {
     try {
-        const vaults = await Vault.find({ owner: req.user.userID });
+        const vaults = await Vault.find({ owner: req.user.userId });
         // Vault.find() gets all vaults
         res.status(200).json(vaults);
     } catch(error) {
@@ -17,9 +17,10 @@ const getVaults = async (req, res) => {
 const createVaults = async (req, res) => {
     try {
         const { name } = req.body;
-        const newVault = await Vault.create({ name, owner: req.user.userID });
+        const newVault = await Vault.create({ name, owner: req.user.userId });
         res.status(201).json(newVault);
     } catch(error) {
+        console.error('🔥 createVault error:', error);
         res.status(500).json({ error: 'Failed to create vault'});
     }
     // 201: The request was successful and resulted in a new resource being CREATED
