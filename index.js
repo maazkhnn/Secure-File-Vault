@@ -6,8 +6,10 @@ require('dotenv').config();
 // compared to "const dotenv = require('dotenv'); dotenv.config();" which is the
 // same thing but lets you access dotenv later if you need it or want more control
 // (like using a .env.local file or checking if .env loaded successfully) then use this
+const { PORT } = require('./config/env');
+//makes the app fail fast if ENCRYPTION_KEY_BASE64 is missing or invalid
 const app = express();
-const PORT = process.env.PORT || 4000; // fallback makes sure the app still runs w/out .env
+//const PORT = process.env.PORT || 4000; // fallback makes sure the app still runs w/out .env
 // common dev ports for web serves/apis: 3000, 4000, 5000
 // common alternatives, sometimes used for proxies or test apis: 8080, 8888
 // reserved for production HTTP/HTTPS: 80, 443 (you usually dont use these for local dev)
@@ -16,6 +18,8 @@ const vaultRoutes = require('./routes/vaultRoutes');
 const authRoutes = require('./routes/authRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 //const userRoutes = require('./routes/userRoutes');
+const logRoutes = require('./routes/logRoutes');
+
 
 // Middleware
 app.use(express.json()); //you're calling a function that returns a middleware function
@@ -46,6 +50,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/vaults', vaultRoutes);
 app.use('/api', fileRoutes);
 //app.use('/api/users', userRoutes); dont need this as of yet(creation already in auth)
+app.use('/api', logRoutes);
+
 
 app.get('/', (req, res) => {
     res.send('Welcome to the SafeHouse API');
