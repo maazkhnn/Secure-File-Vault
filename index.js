@@ -1,5 +1,8 @@
 const express = require('express');
 const colors = require('colors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 const mongoose = require ('mongoose'); //(you only need to run npm install mongoose, as it is built on top of the MongoDB driver, so it automatically installs mongodb as a dependancy behind the scenes)
 require('dotenv').config();
 // this immediately loads and runs the config() function
@@ -20,6 +23,14 @@ const fileRoutes = require('./routes/fileRoutes');
 //const userRoutes = require('./routes/userRoutes');
 const logRoutes = require('./routes/logRoutes');
 
+// Security middleware
+app.use(helmet());
+app.use(cors({ origin: '*' })); // restrict later if needed
+app.use(rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 min
+    max: 100,                 // limit each IP
+    message: { error: 'Too many requests, please try again later' }
+}));
 
 // Middleware
 app.use(express.json()); //you're calling a function that returns a middleware function
@@ -52,15 +63,23 @@ app.use('/api', fileRoutes);
 //app.use('/api/users', userRoutes); dont need this as of yet(creation already in auth)
 app.use('/api', logRoutes);
 
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 app.get('/', (req, res) => {
-    res.send('Welcome to the SafeHouse API');
+    res.send('Starting the secure file vault API');
 });
 
+app.get('/health', (req, res) => res.status(200).send('ok'));
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
+/*
 app.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}`); // it's NOT localhost.com, that's a real domain
 });
-
+*/
 /*
 //app.get('/', (req, res) => {res.status(202).send(`Ay yo this port's working on ${PORT}`);});
 app.get('/:id', (req, res) => {
