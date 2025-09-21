@@ -2,6 +2,9 @@ const DownloadLog = require('../models/downloadlog');
 
 const getVaultLogs = async (req, res) => {
     try {
+        if (!req.flags?.enable_logs_page) {
+            return res.status(403).json({ error: 'Feature disabled by flag: enable_logs_page' });
+        }
         const logs = await DownloadLog.find({ vault: req.params.vaultId })
         .populate('user', 'email')
         .populate('file', 'originalName')

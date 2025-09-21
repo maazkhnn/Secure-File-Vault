@@ -1,13 +1,15 @@
 const mongoose = require('mongoose');
+require('colors');
 
 // async function that will connect to MongoDB, log success, handle any errors, and exit if connection fails
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI);
-        console.log(`MongoDB Connected: ${conn.connection.host}`.cyan.underline);
+        const dbName = process.env.MONGO_DB_NAME || 'safehouseDB';
+        const conn = await mongoose.connect(process.env.MONGO_URI, { dbName });
+        console.log(`MongoDB Connected to db: ${conn.connection.name}`.cyan.underline);
     } catch (error) {
-        console.log(error);
-        process.exit(1); //kill the app
+        console.error(error);
+        process.exit(1);
     }
 }
 

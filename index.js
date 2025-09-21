@@ -16,21 +16,33 @@ const app = express();
 // common dev ports for web serves/apis: 3000, 4000, 5000
 // common alternatives, sometimes used for proxies or test apis: 8080, 8888
 // reserved for production HTTP/HTTPS: 80, 443 (you usually dont use these for local dev)
+const flagsAdapter = require('./flags/adapter');
 const connectDB = require('./config/db');
 const vaultRoutes = require('./routes/vaultRoutes');
 const authRoutes = require('./routes/authRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 //const userRoutes = require('./routes/userRoutes');
 const logRoutes = require('./routes/logRoutes');
+const flagsHealthRoutes = require('./routes/flagsHealthRoutes');
+const debugRoutes = require('./routes/debugRoutes');
+const metricsRoutes = require('./routes/metricsRoutes');
+
+flagsAdapter.init().then(() => {
+    console.log('Flags client initialized. Version:', flagsAdapter.getVersion());
+}).catch((e) => {
+    console.error('Flags client failed to init:', e);
+});
 
 // Security middleware
 app.use(helmet());
 app.use(cors({ origin: '*' })); // restrict later if needed
+/*
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000, // 15 min
     max: 100,                 // limit each IP
     message: { error: 'Too many requests, please try again later' }
 }));
+*/
 
 // Middleware
 app.use(express.json()); //you're calling a function that returns a middleware function
@@ -56,12 +68,25 @@ connectDB(); //recommended style for real apps
     // async/await -> cleaner, preferred for bigger apps
 */
 
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth requests, try later' }
+});
+
+
 //Routes
-app.use('/api/auth', authRoutes);
+app.use('/api', flagsHealthRoutes);
+app.use('/api', metricsRoutes);
+app.use('/api/auth', publicLimiter, authRoutes);
+app.use('/api', debugRoutes);
 app.use('/api/vaults', vaultRoutes);
 app.use('/api', fileRoutes);
 //app.use('/api/users', userRoutes); dont need this as of yet(creation already in auth)
 app.use('/api', logRoutes);
+
 
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);

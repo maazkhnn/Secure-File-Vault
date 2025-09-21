@@ -4,8 +4,12 @@ const requireAuth = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 const uploadFile = require('../controllers/fileController').uploadFile;
 const downloadFile = require('../controllers/fileController').downloadFile;
+const flagMiddleware = require('../middleware/flags');
+const dynamicRateLimit = require('../middleware/dynamicRateLimit');
 
-router.post('/vaults/:vaultId/files', requireAuth, upload.single('file'), uploadFile);
-router.get('/vaults/:vaultId/files/:fileId/download', requireAuth, downloadFile);
+router.use(requireAuth, flagMiddleware, dynamicRateLimit);
+
+router.post('/vaults/:vaultId/files', upload.single('file'), uploadFile);
+router.get('/vaults/:vaultId/files/:fileId/download', downloadFile);
 
 module.exports = router;
