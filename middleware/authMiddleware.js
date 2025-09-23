@@ -12,6 +12,30 @@ const requireAuth = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.demo === true) {
+            // restrict demo token to safe read-only endpoints
+            const allowedPrefixes = [
+                '/api/debug',
+                '/api/metrics',
+                '/api/health',
+                '/api/docs',
+                '/api/flags-healthz'
+            ];
+
+            const ok = allowedPrefixes.some(prefix =>
+                req.originalUrl.startsWith(prefix)
+            );
+
+            if (!ok) {
+                return res
+                .status(403)
+                .json({ error: 'Demo token cannot access this endpoint' });
+            }
+
+            req.user = { demo: true };
+            return next();
+        }
+
         req.user = { userId: decoded.userId }; // the authenticated user's ID, pulled from JWT, verified, and attached to the request
         next();
     } catch (error) {

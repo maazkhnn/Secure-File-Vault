@@ -26,6 +26,8 @@ const logRoutes = require('./routes/logRoutes');
 const flagsHealthRoutes = require('./routes/flagsHealthRoutes');
 const debugRoutes = require('./routes/debugRoutes');
 const metricsRoutes = require('./routes/metricsRoutes');
+const docsRoutes = require('./routes/docsRoutes');
+const demoTokenRoutes = require('./routes/demoTokenRoutes');
 
 flagsAdapter.init().then(() => {
     console.log('Flags client initialized. Version:', flagsAdapter.getVersion());
@@ -78,6 +80,8 @@ const publicLimiter = rateLimit({
 
 
 //Routes
+app.use('/api', demoTokenRoutes);
+app.use('/api', docsRoutes);
 app.use('/api', flagsHealthRoutes);
 app.use('/api', metricsRoutes);
 app.use('/api/auth', publicLimiter, authRoutes);

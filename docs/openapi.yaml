@@ -1,0 +1,610 @@
+openapi: 3.0.0
+info:
+  title: File Vault (Safehouse) API
+  version: 1.0.0
+  description: |
+    A secure, cloud-native file vault with AES-256-GCM encryption and AWS S3 storage.
+    Feature-flag integrated (via SDK) - flag driven behaviors.
+
+servers:
+  - url: http://localhost:4000/api
+    description: Local dev
+  - url: https://api.file-vault-demo.com/api
+    description: Deployed
+
+tags:
+  - name: Auth
+  - name: Vaults
+  - name: Files
+  - name: Logs
+  - name: Flags (Debug)
+  - name: Health
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccess'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and obtain JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: JWT token (bearer)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccess'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /vaults:
+    get:
+      tags: [Vaults]
+      summary: List vaults for the authenticated user
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: Array of vaults
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Vault' }
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    post:
+      tags: [Vaults]
+      summary: Create a new vault
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVaultRequest'
+      responses:
+        '201':
+          description: Vault created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vault'
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /vaults/{vaultId}/files:
+    post:
+      tags: [Files]
+      summary: Upload a file to a vault (encrypted and stored in S3)
+      description: |
+        Accepts multipart/form-data with `file`. The server encrypts the file (AES-256-GCM) in-memory,
+        uploads ciphertext to S3, and stores metadata (iv, authTag, s3Key, etc.) in MongoDB.
+        Uploads are **flag-controlled**:
+          - `max_upload_mb` (numeric) → returns 413 if exceeded
+          - `new_upload_variant` (string) → response includes `X-Upload-Variant` header & body field
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/VaultId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        '201':
+          description: File uploaded
+          headers:
+            X-Upload-Variant:
+              description: Variant label from feature flag (e.g., legacy or encrypted_v2)
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Vault does not belong to user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '413':
+          description: Upload too large (flag-controlled max)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: Rate limited (flag-controlled)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /vaults/{vaultId}/files/{fileId}/download:
+    get:
+      tags: [Files]
+      summary: Download a file from a vault (decrypted stream)
+      description: |
+        Streams ciphertext from S3, decrypts on-the-fly (AES-256-GCM), and returns plaintext bytes.
+        Sets `Content-Disposition` to original filename.
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/VaultId'
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: Binary file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: File/vault not owned by user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: Rate limited (flag-controlled)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /vaults/{vaultId}/logs:
+    get:
+      tags: [Logs]
+      summary: Download audit logs for a vault
+      description: |
+        Returns recent download events with populated user email and file name.
+        **Flag-gated** by `enable_logs_page`. If disabled, returns 403.
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/VaultId'
+      responses:
+        '200':
+          description: Logs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DownloadLog' }
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Feature disabled by flag or unauthorized vault access
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: Rate limited (flag-controlled)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /debug/flags:
+    get:
+      tags: [Flags (Debug)]
+      summary: Evaluate all flags for a given context
+      description: |
+        Uses the integrated Feature-Flag SDK to evaluate all flags locally.
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/UserKey'
+        - $ref: '#/components/parameters/Plan'
+        - $ref: '#/components/parameters/Country'
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: All flags for the context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugFlagsResponse'
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /debug/decision:
+    get:
+      tags: [Flags (Debug)]
+      summary: Evaluate a single flag for a given context
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: flag
+          required: true
+          schema: { type: string }
+          description: Flag key to evaluate
+        - $ref: '#/components/parameters/UserKey'
+        - $ref: '#/components/parameters/Plan'
+        - $ref: '#/components/parameters/Country'
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Decision result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugDecisionResponse'
+        '400':
+          description: Missing ?flag=
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Missing/invalid JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /debug/which-upload-route:
+    get:
+      tags: [Flags (Debug)]
+      summary: Returns the active upload variant label
+      description: Reads `new_upload_variant` (e.g., legacy | encrypted_v2)
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/UserKey'
+        - $ref: '#/components/parameters/Plan'
+        - $ref: '#/components/parameters/Country'
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Variant response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadVariantResponse'
+
+  /debug/ttl:
+    get:
+      tags: [Flags (Debug)]
+      summary: Returns the download/share TTL (hours)
+      description: Reads `download_ttl_hours`, defaults to 24
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/UserKey'
+        - $ref: '#/components/parameters/Plan'
+        - $ref: '#/components/parameters/Country'
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: TTL response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TtlResponse'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Service health
+      description: Reports DB connectivity and flag client status
+      responses:
+        '200':
+          description: Health info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Service metrics (counters)
+      description: Uptime and simple counters (uploads, downloads, logins)
+      responses:
+        '200':
+          description: Metrics info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+  /flags-healthz:
+    get:
+      tags: [Health]
+      summary: Feature-Flag client health
+      description: SDK initialization state and current snapshot version
+      responses:
+        '200':
+          description: Flags health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  version: { type: string, nullable: true }
+                  lastUpdateTs: { type: integer, format: int64, nullable: true }
+                example:
+                  ok: true
+                  version: "42"
+                  lastUpdateTs: 1698950000000
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    VaultId:
+      name: vaultId
+      in: path
+      required: true
+      schema: { type: string }
+    FileId:
+      name: fileId
+      in: path
+      required: true
+      schema: { type: string }
+    UserKey:
+      name: user
+      in: query
+      required: false
+      schema: { type: string }
+      description: Override user key for demo
+    Plan:
+      name: plan
+      in: query
+      required: false
+      schema: { type: string, enum: [free, pro] }
+    Country:
+      name: country
+      in: query
+      required: false
+      schema: { type: string, example: US }
+    Tenant:
+      name: tenant
+      in: query
+      required: false
+      schema: { type: string, example: acme }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username: { type: string, example: demoUser }
+        email:    { type: string, format: email, example: demo@safehouse.io }
+        password: { type: string, format: password, example: demo1234 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email, example: demo@safehouse.io }
+        password: { type: string, format: password, example: demo1234 }
+
+    AuthSuccess:
+      type: object
+      properties:
+        token: { type: string, example: eyJhbGciOi... }
+        user:
+          type: object
+          properties:
+            id: { type: string, example: 663a3f0d2a... }
+            email: { type: string, example: demo@safehouse.io }
+            username: { type: string, example: demoUser }
+
+    CreateVaultRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: Demo Vault }
+
+    Vault:
+      type: object
+      properties:
+        id: { type: string, example: 663a3f0d2a... }
+        name: { type: string, example: Demo Vault }
+        owner: { type: string, example: 663a3f0d2a... }
+        createdAt: { type: string, format: date-time }
+
+    File:
+      type: object
+      properties:
+        id: { type: string, example: 663a4a0921... }
+        originalName: { type: string, example: hello.txt }
+        owner: { type: string, example: 663a3f0d2a... }
+        vault: { type: string, example: 663a400e7d... }
+        mimeType: { type: string, example: text/plain }
+        size: { type: integer, example: 27 }
+        uploadedAt: { type: string, format: date-time }
+        iv: { type: string, example: 3f1a9e2d... , nullable: true }
+        authTag: { type: string, example: 7b4d0c9a..., nullable: true }
+        s3Key: { type: string, example: vaults/663a4.../files/abc123.enc, nullable: true }
+
+    UploadResponse:
+      type: object
+      properties:
+        message: { type: string, example: File uploaded & encrypted to S3 }
+        variant: { type: string, example: encrypted_v2 }
+        maxMb: { type: integer, example: 20 }
+        file: { $ref: '#/components/schemas/File' }
+
+    DownloadLog:
+      type: object
+      properties:
+        id: { type: string, example: 663a5b7701... }
+        user:
+          type: object
+          properties:
+            id: { type: string, example: 663a3f0d2a... }
+            email: { type: string, example: demo@safehouse.io }
+        file:
+          type: object
+          properties:
+            id: { type: string, example: 663a4a0921... }
+            originalName: { type: string, example: hello.txt }
+        vault: { type: string, example: 663a400e7d... }
+        timestamp: { type: string, format: date-time, example: 2025-06-10T12:34:56.789Z }
+
+    DebugFlagsResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        context:
+          type: object
+          properties:
+            user: { type: string, example: alice }
+            plan: { type: string, example: pro }
+            country: { type: string, example: US }
+            tenant: { type: string, example: acme }
+        version: { type: string, example: "42" }
+        flags:
+          type: object
+          additionalProperties: true
+          example:
+            enable_logs_page: true
+            strict_rate_limit: false
+            max_upload_mb: 20
+            new_upload_variant: encrypted_v2
+
+    DebugDecisionResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        context:
+          type: object
+        version: { type: string, example: "42" }
+        flag: { type: string, example: enable_logs_page }
+        variant:
+          description: The evaluated value for the flag
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - type: "null"
+
+    UploadVariantResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        context: { type: object }
+        version: { type: string, example: "42" }
+        uploadVariant: { type: string, example: encrypted_v2 }
+
+    TtlResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        context: { type: object }
+        version: { type: string, example: "42" }
+        download_ttl_hours: { type: integer, example: 24 }
+
+    HealthResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        service: { type: string, example: safehouse-api }
+        version: { type: string, example: 1.0.0 }
+        uptimeSec: { type: integer, example: 12345 }
+        db:
+          type: object
+          properties:
+            ok: { type: boolean }
+            name: { type: string, example: safehouseDB }
+            state:
+              type: integer
+              description: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+              example: 1
+        flags:
+          type: object
+          properties:
+            ok: { type: boolean }
+            version: { type: string, nullable: true, example: "42" }
+            lastUpdateTs: { type: integer, format: int64, nullable: true }
+
+    MetricsResponse:
+      type: object
+      properties:
+        startedAt: { type: integer, format: int64, example: 1698950000000 }
+        uptimeSec: { type: integer, example: 3600 }
+        counters:
+          type: object
+          properties:
+            uploads: { type: integer, example: 3 }
+            downloads: { type: integer, example: 2 }
+            logins: { type: integer, example: 5 }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string, example: Unauthorized }
